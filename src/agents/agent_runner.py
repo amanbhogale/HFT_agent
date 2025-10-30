@@ -5,8 +5,7 @@ Contains functions and classes to define nodes, tools, and workflow logic for th
 """
 
 from src.state import State
-from src.agents.tools import gemini_chat_tool, fetch_fundamentals, calculate_ratios, analyze_news_sentiment
-
+from src.agents.tools import gemini_chat_tool, fetch_fundamentals, calculate_ratios, analyze_news_sentiment ,fetch_current_price , fetch_shares_and_market_cap
 def run_chatbot():
     """Run the interactive chatbot interface."""
     state: State = {"messages": []}
@@ -48,7 +47,8 @@ def run_chatbot():
 
                 # Calculate ratios with error handling
                 try:
-                    ratios_df = calculate_ratios(fundamentals_df)
+                    shares_outstanding , market_cap =  fetch_shares_and_market_cap(symbol)
+                    ratios_df = calculate_ratios(fundamentals_df , shares_outstanding , market_cap)
                     if not ratios_df.empty:
                         print("Ratios calculated successfully:")
                         print(ratios_df.head())
