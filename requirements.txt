@@ -82,6 +82,7 @@ orjson==3.11.3
 ormsgpack==1.10.0
 packaging==25.0
 pandas==2.3.2
+pymongo==4.10.1
 pandocfilters==1.5.1
 parso==0.8.5
 pexpect==4.9.0
