@@ -39,6 +39,8 @@ def gemini_chat_tool(state: State) -> State:
     return state
 
 
+
+
 def fetch_fundamentals(symbol: str) -> pd.DataFrame:
     url = f'https://finnhub.io/api/v1/stock/financials-reported?symbol={symbol}&token={FINNHUB_API_KEY}'
     response = requests.get(url)
