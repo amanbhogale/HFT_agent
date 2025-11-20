@@ -8,6 +8,8 @@ class State(TypedDict, total=False):
     symbol: Optional[str]
     ratios: Optional[Dict[str, Any]]
     fundamental_data: Optional[Dict[str, Any]]
+    technical_data: Optional[Dict[str, Any]]
+    price_data: Optional[Dict[str, Any]]
     sentiment_data: Optional[List[Dict[str, Any]]]
     visualization_url: Optional[str]
 
