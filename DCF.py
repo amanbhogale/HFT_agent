@@ -1,10 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-t = yf.Ticker("RELIANCE.NS")  # Example ticker for Reliance Industries
-print("INCOME\n" , t.financials.head())
-print("CASHFLOW\n" , t.cashflow.head())
-print("BALANCE SHEET\n" , t.balance_sheet.head())
+import argparse
 
 def fetch_financials(symbol: str):
     """
@@ -31,13 +28,32 @@ def estimate_fcf_series(financials: dict, years: int = 4) -> pd.Series:
     FCFF = EBIT*(1-T) + D&A - CapEx - ΔNWC
     """
     cf = financials["cashflow"]
-    if "Free Cash Flow" in cf.index:
-        raise ValueError("No 'Free cash flow' row in cashflow statement")
-    fcff = cf.loc["Free cash flow"].astype(float)
-    fcff = fcff.dropna().iloc[:years]
-    if fcff.empty:
-        raise ValueError("No Free Cash Flow data available")
-    return fcff.sort_index()
+    fcf_row = None
+    for row_name in ["Free Cash Flow", "Free cash flow", "FreeCashFlow"]:
+        if row_name in cf.index:
+            fcf_row = row_name
+            break
+
+    if fcf_row:
+        fcff = cf.loc[fcf_row].dropna().iloc[:years].astype(float)
+        if not fcff.empty:
+            print(f"Found FCF {fcf_row} row in cashflow statement.")
+            return fcff.sort_index()
+    print("Estimating FCFF from financial statements...")
+    income = financials["income"]
+    try:
+        ebit = income.loc["Ebit"].iloc[0] if "Ebit" in income.index else 0
+        depr_row = next((r for r in cf.index if "Depreciation" in r), None)
+        capex_row = next((r for r in cf.index if "Capital" in r and "Expend" in r), None)
+
+        depr = cf.loc[depr_row].iloc[0] if depr_row else 0
+        capex = cf.loc[capex_row].iloc[0] if capex_row else 0
+        fcff_approx = ebit * 0.7 + depr - capex  # assuming 30% tax
+        print(f"  EBIT: {ebit:, .0f} , D&A: {depr:, .0f} , CapEx: {capex:, .0f} => FCFF: {fcff:, .0f}")
+        print(f"   Approx FCF: {fcff_approx:,.0f}")
+        return pd.Series([fcff_approx], index=[pd.Timestamp.now().year])
+    except Exception as e:
+        raise ValueError(f"Error estimating FCFF: {e}")
 
 def dcf_intrinsic_value(
     last_fcf: float,
