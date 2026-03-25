@@ -1,5 +1,5 @@
-import pytest
 
+import pytest
 from src.agents.graph import graph
 
 pytestmark = pytest.mark.anyio
