@@ -1,50 +1,147 @@
 """
-already created collections in mongo 
-designing the schema for the collections in mongo
-
-1. validation of the data before inserting into mongo
-2. As a refrence for the  collection JSON-schema validator 
+schemas/mongo_schemas.py
+────────────────────────
+Pydantic v2 models that define the shape of each MongoDB node document.
+These are used:
+  1. As validation before writes (loaders).
+  2. As a reference for the collection JSON-Schema validator (see bottom).
 """
+
 from __future__ import annotations
-from datatime import datatime
-from typing import List , Any , Dict , Optional
-from pydantic import BaseModel , Field
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
 
-#----------------
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Node: Asset
+# ══════════════════════════════════════════════════════════════════════════════
+
 class AssetNode(BaseModel):
-    ticker: str = Field(..., description="Ticker symbol of the asset")
-    company_name: Optional[str] = Field(None, description="Company name associated with the asset")
-    sector: Optional[str] = Field(None, description="Sector to which the asset belongs")
-    market_cap: Optional[float] = Field(None, description="Market capitalization of the asset")
-    price_inr : Optional[float] = Field(None, description="Price of the asset in INR")
-    volume_24h: Optional[float] = Field(None, description="Trading volume of the asset in the last 24 hours")
-    change_24h_pct: Optional[float] = Field(None, description="Price change of the asset in the last 24 hours in percentage")
-    
-
-# ===============================================
-# Node MacroEconomic Indicators
-# ===============================================
-
-class MacroEconomicIndicatorNode(BaseModel):
     """
-    A single macroeconomic indicator data point, such as GDP, inflation rate, or unemployment rate.
-    upsetting the data in the form of a node in the graph database
-
-
+    Represents a tradeable crypto asset.
+    Upsert key: ticker
     """
-    indicator: str = Field(..., description="Name of the macroeconomic indicator")
-    displat_name: Optional[str] = Field(None, description="Display name of the macroeconomic indicator")
-    current_value: Optional[float] = Field(None, description="Current value of the macroeconomic indicator")
-    previous_value: Optional[float] = Field(None, description="Previous value of the macroeconomic indicator")
-    change : Optional[float] = Field(None, description="Change in the macroeconomic indicator value current value - previous value")
-    unit : str = ""
-    frequency: str = ""
-    date: datetime = Field(default_factory=datetime.now, description="Date of the macroeconomic indicator data point")
+    ticker: str                          # e.g. "BTC"
+    company_name: str                    # e.g. "Bitcoin"
+    sector: str                          # e.g. "Layer 1", "DeFi", "Exchange"
+    market_cap: Optional[float] = None   # USD
+    price_usd: Optional[float] = None
+    volume_24h: Optional[float] = None
+    change_24h_pct: Optional[float] = None
+    circulating_supply: Optional[float] = None
+    total_supply: Optional[float] = None
+    rank: Optional[int] = None
+    source: str = "coingecko"
+    ingested_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Node: MacroEconomic
+# ══════════════════════════════════════════════════════════════════════════════
+
+class MacroEconomicNode(BaseModel):
+    """
+    A single macro indicator reading.
+    Upsert key: (indicator, date)
+    """
+    indicator: str                       # e.g. "CPI", "FEDFUNDS"
+    display_name: str                    # e.g. "Consumer Price Index"
+    current_value: Optional[float] = None
+    previous_value: Optional[float] = None
+    change: Optional[float] = None       # current - previous
+    unit: str = ""                       # e.g. "Index", "Percent", "Billions USD"
+    frequency: str = ""                  # "Monthly", "Weekly", "Quarterly"
+    date: datetime = Field(default_factory=datetime.utcnow)
     source: str = "fred"
-    ingested_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the data was ingested into the database")
+    ingested_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Node: Event / News
+# ══════════════════════════════════════════════════════════════════════════════
+
+class EventNewsNode(BaseModel):
+    """
+    A news headline or market event.
+    Upsert key: headline_hash (MD5 of headline + date)
+    """
+    headline_hash: str                   # dedup key
+    headline: str
+    body: Optional[str] = None
+    date: datetime
+    source: str                          # e.g. "CryptoCompare", "CoinTelegraph"
+    url: Optional[str] = None
+    category: Optional[str] = None      # "Regulation", "DeFi", "Exchange", etc.
+    related_assets: List[str] = []       # ["BTC", "ETH"]
+    sentiment: Optional[str] = None      # "positive" | "neutral" | "negative"
+    sentiment_score: Optional[float] = None  # -1.0 to 1.0
+    ingested_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Node: Algorithm  (written by agentic workflow, NOT the scheduled ETL)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AlgorithmNode(BaseModel):
+    """
+    An algorithm decision record written by the agentic workflow.
+    Each write captures one activation event.
+    Upsert key: (algo_name, triggered_at)
+    """
+    algo_name: str                       # "Mean Reversion" | "Momentum" | etc.
+    optimal_market_condition: str        # "High Volatility" | "Bull Market" | etc.
+    parameters: Dict[str, Any] = {}     # algo-specific config
+    triggered_on_asset: Optional[str] = None   # "BTC"
+    confidence_score: Optional[float] = None   # 0.0 – 1.0
+    signal: Optional[str] = None        # "BUY" | "SELL" | "HOLD"
+    notes: Optional[str] = None
+    triggered_at: datetime = Field(default_factory=datetime.utcnow)
+    created_by: str = "agentic_workflow"
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# MongoDB collection validators (apply once at DB init)
+# ══════════════════════════════════════════════════════════════════════════════
+
+ASSET_VALIDATOR = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["ticker", "company_name", "sector"],
+        "properties": {
+            "ticker":       {"bsonType": "string"},
+            "company_name": {"bsonType": "string"},
+            "sector":       {"bsonType": "string"},
+            "market_cap":   {"bsonType": ["double", "null"]},
+            "price_usd":    {"bsonType": ["double", "null"]},
+        },
+    }
+}
+
+MACRO_VALIDATOR = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["indicator", "date"],
+        "properties": {
+            "indicator":     {"bsonType": "string"},
+            "current_value": {"bsonType": ["double", "null"]},
+        },
+    }
+}
+
+ALGORITHM_VALIDATOR = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["algo_name", "optimal_market_condition"],
+        "properties": {
+            "algo_name":                {"bsonType": "string"},
+            "optimal_market_condition": {"bsonType": "string"},
+            "confidence_score": {
+                "bsonType": ["double", "null"],
+                "minimum": 0,
+                "maximum": 1,
+            },
+        },
+    }
+}
