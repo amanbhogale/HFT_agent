@@ -10,7 +10,7 @@ from datatime import datatime
 from typing import List , Any , Dict , Optional
 from pydantic import BaseModel , Field
 
-
+#----------------
 class AssetNode(BaseModel):
     ticker: str = Field(..., description="Ticker symbol of the asset")
     company_name: Optional[str] = Field(None, description="Company name associated with the asset")
